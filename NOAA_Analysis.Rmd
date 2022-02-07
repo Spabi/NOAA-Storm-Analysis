@@ -1,0 +1,121 @@
+---
+title: Assessment of the Public Health Danger and Economic Consequences of Severe
+  Weather Events in the United States
+author: "John Woods"
+date: "07/02/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+library(tidyverse)
+library(lubridate)
+```
+
+## Synopsis
+
+
+
+
+
+## Introduction
+
+Extreme weather events are a regular occurance in the United States. In 2021 alone there were 20 'Billion-dollar disaster events' leading to 688 fatalities and causing $145 Billion in damage (NOAA, 2022). Being able to predict and better manage responses to these events will enable the creation of data driven polocies and protocols that could reduce this loss of life and economic damage. The aim of this report is to provide actionable insight into these events and give reccomendations on how resources could be prioritised based on them.
+
+
+## Data Processing
+
+This analysis will be using the US National Oceanic and Atmospheric Administration's (NOAA) storm database. The database tracks major storms and weather evvents in the United States, including when and where they occur along with estimates of any fatalities, injuries and property damage. The data can be downloaded here: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2
+
+We first read in the data which is comma delimited and we keep the header data .
+
+```{r cache = TRUE, message = FALSE}
+storm_data <- read_csv("repdata_data_StormData.csv.bz2")
+```
+```{r}
+dim(storm_data)
+```
+```{r}
+head(storm_data)
+```
+
+The data contains observations of 902297 events consisting of 37 features for each. We aren't interested in all of these features so we'll drop those that are not relevant to our high level analysis. We'll also make the column names lower case so they are easier to type.
+
+```{r}
+names(storm_data) <- tolower(names(storm_data))
+storm_data <- subset(storm_data, select = -c(bgn_time, time_zone, bgn_range, bgn_azi, bgn_locati,
+                                             end_date, end_time, county_end, countyendn, 
+                                             end_range, end_azi, end_locati, f, mag, length, width,
+                                             stateoffic, zonenames, latitude_e, longitude_,
+                                             remarks, refnum, latitude, longitude, wfo))
+```
+
+The values for property and crop damage consist of a value column and a column denoting if the value is in thousands/millions etc. We'll condense these columns dollar amounts.
+
+```{r}
+table(storm_data['propdmgexp'])
+```
+Well we can safely assume B/M/K are billion/million/thousand however without documentation on the others the safest cause of action is to drop the rows containing them. 
+
+```{r}
+storm_data <- storm_data %>%
+  mutate(propdmgexp = tolower(propdmgexp), cropdmgexp = tolower(cropdmgexp)) %>%
+  filter(propdmgexp %in% c("b", "m", "k", NA) & cropdmgexp %in% c("b", "m", "k", NA)) %>%
+  mutate(propdmgexp = case_when(propdmgexp == "k" ~ 1000,
+                                propdmgexp == "m" ~ 1000000,
+                                propdmgexp == "b" ~ 1000000000,
+                                is.na(propdmgexp) ~ 1),
+         cropdmgexp = case_when(cropdmgexp == "k" ~ 1000,
+                                cropdmgexp == "m" ~ 1000000,
+                                cropdmgexp == "b" ~ 1000000000,
+                                is.na(cropdmgexp) ~ 1)) %>%
+  mutate(propdmg = propdmg * propdmgexp, cropdmg = cropdmg * cropdmgexp) %>%
+  subset(select = -c(propdmgexp, cropdmgexp))
+```
+
+Currently the date feature is a date time char set to midnight for each date. Let's isolate the date.
+
+```{r}
+storm_data <- storm_data %>%
+  mutate(bgn_date = mdy(as.character(map(str_split(bgn_date, pattern = " "), 1))))
+```
+
+The dataset has 973 unique weather events. There are some errors in this feature including typos and values that aren't weather events, these need to be addressed before analysis.
+
+```{r}
+storm_data <- storm_data %>%
+  mutate(evtype = tolower(evtype)) %>%
+  filter(!grepl("summary", evtype)) %>%
+  filter(!evtype %in% c("?", "high", "none")) %>%
+  mutate(evtype = case_when(evtype == "thunderstorm winds" ~ "thunderstorm wind",
+                            evtype == "tstm wind" ~ "thunderstorm wind",
+                            grepl("flash flood", evtype) ~ "flash flood",
+                            grepl("rip current", evtype) ~ "rip current",
+                            grepl("hail", evtype) ~ "hail",
+                            grepl("blizzard", evtype) ~ "blizzard",
+                            grepl("thunderstorm wind", evtype) ~ "thunderstorm wind",
+                            grepl("tstm wind", evtype) ~ "thunderstorm wind",
+                            grepl("hurricane", evtype) ~ "hurricane",
+                            TRUE ~ evtype))
+
+ev_counts <- group_by(storm_data, evtype) %>%
+  summarise(count = n(), avg_fatalaties = mean(fatalities), avg_propdmg = mean(propdmg), 
+            weight = n() / dim(storm_data)[1] * mean(fatalities))
+ev_counts[order(-ev_counts$count),]
+
+```
+
+
+## Analysis
+
+First we will look at events that cause the greatest loss of life and injury. The dataset has 973 unique weather events
+
+
+
+
+
+
+
+
+
+NOAA National Centers for Environmental Information (NCEI) U.S. Billion-Dollar Weather and Climate Disasters (2022). https://www.ncdc.noaa.gov/billions/, DOI: 10.25921/stkw-7w73
