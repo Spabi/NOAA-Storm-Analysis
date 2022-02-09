@@ -134,65 +134,125 @@ events_5[order(events_5$evtype),]
 ```
 We've managed to go from 973 unique weather events to 157 whilst only reducing the number of observations by 0.12%! (1089)
 
+Lets store these weather events in a new dataframe
+```{r}
+events <- storm_data %>%
+  filter(evtype %in% events_5$evtype)
+```
+
+
+In the last step we realized that there's a large event frequency imbalance in this dataset. This might reflect reality as some weather events are more common than others. However It could also indicate problems with the collection or labeling of the underlying data, so we should check for any inconsistencies. lets look at the number of occurrences for each event.
+
+```{r}
+event_frequency <- events_5[order(-events_5$count),]
+event_frequency
+```
+This seems a bit odd. We know events that didn't cause any damage are included so why are events like tornadoes and flash floods occurring more often than high wind and flood in the data. Lets plot 10 highest frequency over time to get more insight.
+
+```{r}
+frequency_data <- storm_data %>%
+  filter(evtype %in% head(event_frequency$evtype, 10))
+
+
+ggplot(data = frequency_data, aes(bgn_date, color = evtype)) +
+  geom_histogram()
+```
+So the only highest frequency weather events that were being recorded in this database prior to 1993 were tornadoes, thunderstorm winds and hail. It seems very unlikely that these were the only events causing damage so it looks like we have a lot of missing data prior to 1993. Lets also check the less frequent events over this period.
+
+```{r}
+distinct_events <- events %>%
+  filter(bgn_date >= mdy("01/01/89") & bgn_date < mdy("01/01/99")) %>%
+  group_by(year(bgn_date)) %>%
+  summarise(events = n_distinct(evtype))
+distinct_events
+```
+
+looking at all the years it is the case that up until 1993 only 3 types of events were recorded. We'll drop years prior to 1993 so that we're only looking at years where the majority of events are being recorded (because of poor data entry formatting we expect the number of distinct event types to differ from year to year)
+
+```{r}
+events <- events %>%
+  filter(bgn_date >= mdy("01/01/93"))
+events
+```
+
+As mentioned earlier we have also seen that sometimes events that didn;t cause damage are recorded and sometimes they aren't. This makes using the average values problematic and so we will use only the totals under the assumption that all events that did cause damage were recorded.
+
+
 ## Exploratory Data Analysis
+
+Note: I've been limited to 3 figures in this assignment therefore I won't be including any EDA plots
 
 ### Damage to human life
 
 First we will look at events that cause the greatest loss of life and injury.
 
 ```{r}
-events_5[order(-events_5$avg_fatalities),]
-
+pop_dmg <- events %>%
+  group_by(evtype) %>%
+  summarise(count = n(), fatalities = sum(fatalities), injuries = sum(injuries))
+pop_dmg[order(-pop_dmg$fatalities),]
 ```
 ```{r}
-events_5[order(-events_5$avg_injuries),]
-
+pop_dmg[order(-pop_dmg$injuries),]
 ```
-Looking at these tables it seems that the data on fatalities is a better indicator of the danger to 
-public health. Due to the complicated nature of measuring death against injury and the lack of information about injuries I'll use fatalities alone when assessing how harmful to population health an event is. 
-
-From the data it seems like extreme heat events are the most harmful to population health but it would be a good idea to also look at the total fatalities for a given event in order to account for frequency.
+The proportion of fatalities in the 10 most deadly types of events
 
 ```{r}
-fatalities <- events_5 %>%
-  summarise(evtype = evtype,  total_fatalities = count * avg_fatalities, avg_fatalities = avg_fatalities)
-fatalities <- head(fatalities[order(-fatalities$total_fatalities), ], 10)
-fatalities
+deadliest_events <- head(pop_dmg[order(-pop_dmg$fatalities),], 10)
+sum(deadliest_events$fatalities) / sum(pop_dmg$fatalities)
 ```
 
+Due to the complicated nature of measuring death against injury and the lack of information about the kinds of injuries sustained I'll be using fatalities alone when assessing how harmful to population health an event is. More specifically I will assess the 10 events with the highest fatality rate as they are responsible for 77% of the total fatalities attributed to weather events. The rationale behind this is that these are the types relevant to this specific analysis and only using them will improve clarity.
 
+Lets make a data frame containing all observations from these types:
 ```{r}
-melted_fatalities <- melt(head(fatalities, 10)) %>%
-  mutate(variable = case_when(variable == "total_fatalities" ~ "Total Fatalities",
-                              variable == "avg_fatalities" ~ "Average Fatalities per Event"))
-
-
-
-ggplot(data = melted_fatalities, aes(x = evtype, y = value)) +
-  facet_grid(cols = vars(variable), scales = "free") +
-  theme(strip.text.x = element_text(angle = 0))  +
-  geom_bar(stat = "identity") +
-  labs(title = "Average and Total Fatalaties for the 10 most Deadly Types of\nWeather Events in the United States 1950 - 2011", x = "", y = "") +
-  coord_flip() 
-  
+pop_dmg_data <- events %>%
+  filter(evtype %in% deadliest_events$evtype)
 ```
-Including the total fatalities per event type shows us that tornadoes have caused the largest number of fatalities in the US over the period by a large margin. If we were to collate all heat related events into one category this margin would be reduced and possibly reversed, however doing so would be outside the scope of this analysis.
-
 
 ### Economic Damage
 
-Whilst one could rightly argue that the loss of human life in itself is a form of economic damage we will only be regarding damage to property and crops in this analysis.
+Whilst one could rightly argue that the loss of human life in itself is a form of economic damage we will only be regarding damage to property and crops in this part of the analysis.
 
-As both property and crop damage are measured in dollar amounts we will simply combine them to address the economic damage
+As both property and crop damage are measured in dollar amounts we will simply combine them to address the economic damage of different types of events.
 
 ```{r}
-economic_damage <- events_5 %>%
-  summarise(evtype = evtype, economic_damage = count * avg_propdmg + count * avg_cropdmg)
-economic_damage[order(-economic_damage$economic_damage),]
+economic_dmg <- events %>%
+  group_by(evtype) %>%
+  summarise(count = n(), damage = sum(propdmg + cropdmg))
+economic_dmg[order(-economic_dmg$damage),]
+```
+
+We can see floods have had the greatest total economic consequences from 1993 - 2011 and different types of flooding occur several times in the 10 most damaging events. As with fatalities lets see what proportion of economic damage the top ten events account for:
+
+```{r}
+costliest_events <- head(economic_dmg[order(-economic_dmg$damage),], 10)
+sum(costliest_events$damage) / sum(economic_dmg$damage)
+```
+The top ten events occur for 90% of the economic damage from all weather events - as with fatalities we'll only look at these events in relation to economic damage.
+
+```{r}
+economic_dmg_data <- events %>%
+  filter(evtype %in% costliest_events$evtype)
 ```
 
 
+## Analysis
+
+To provide a simple understandable analysis I've decided to rely on the total fatalities and economic damage to assess which events have the greatest consequences to human life and the economy across the United States. The rationale for this decision is that the requirements of this analysis are to the damage of the event type as a whole and not individual occurunces of it.
+
+The data spans approximately 60 years, a time period which has experienced the introduction new technologies (early warning systems, rescue equipment, etc), population movement and policy changes. Therefore it's important to analyze the temporal variations in order to account for the current situation.
+
+```{r}
+fatality_data <- storm_data %>%
+  filter(evtype %in% fatalities_top_10$evtype)
+
+economic_data <- storm_data %>%
+  filter(evtype %in% economic_dmg_top_10$evtype)
 
 
+ggplot(data = group_by(fatality_data, evtype), aes(bgn_date, log(fatalities), color = evtype)) +
+  stat_summary(fun = "sum", geom = "line")
+```
 
 NOAA National Centers for Environmental Information (NCEI) U.S. Billion-Dollar Weather and Climate Disasters (2022). https://www.ncdc.noaa.gov/billions/, DOI: 10.25921/stkw-7w73
