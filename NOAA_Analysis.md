@@ -1,12 +1,6 @@
----
-title: Assessment of the Public Health Danger and Economic Consequences of Severe
-  Weather Events in the United States
-author: "John Woods"
-date: "07/02/2022"
-output: 
-  html_document: 
-    keep_md: yes
----
+
+# Assessment of the Public Health Danger and Economic Consequences of Severe Weather Events in the United States
+<p align=center>by John Woods</p>
 
 
 
