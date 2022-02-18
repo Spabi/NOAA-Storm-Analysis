@@ -8,32 +8,30 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+options(scipen=100000)
 library(tidyverse)
 library(lubridate)
 library(reshape2)
+library(RColorBrewer)
+library(gridExtra)
+library(grid)
 ```
 
 ## Synopsis
 
 
-
-
-
-## Introduction
-
-Extreme weather events are a regular occurrence in the United States. In 2021 alone there were 20 'Billion-dollar disaster events' leading to 688 fatalities and causing $145 Billion in damage (NOAA, 2022). Being able to predict and better allocate resources to these events will enable the creation of data driven policies and protocols that could reduce this loss of life and economic damage and speed up recovery. The aim of this report is to provide actionable insight into these events and give recommendations on how resources could be prioritized based on them.
-
+Extreme weather events are a regular occurrence in the United States. In 2021 alone there were 20 'Billion-dollar disaster events' leading to 688 fatalities and causing $145 Billion in damage (NOAA, 2022). Being able to predict and better allocate resources to these events will enable the creation of data driven policies and protocols that could reduce this loss of life and economic damage as well as speeding up recovery. The aim of this report is to provide actionable insight into these events and give recommendations on how resources could be prioritized based on them. The analysis is part of an assignment for the John Hopkins University Reproducible Research course as part of their Data Science Specialization. The assignment asks the questions: Across the United States which types of events are most harmful with respect to population health and which events have the greatest economic consequences. This analysis will be using the US National Oceanic and Atmospheric Administration's (NOAA) storm database. The database tracks major storms and weather events across the United States, including when and where they occur along with estimates of any fatalities, injuries and property damage. The data can be downloaded from: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2
 
 ## Data Processing
 
-This analysis will be using the US National Oceanic and Atmospheric Administration's (NOAA) storm database. The database tracks major storms and weather events across the United States, including when and where they occur along with estimates of any fatalities, injuries and property damage. The data can be downloaded from: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2
 
 We first read in the data which is comma delimited keeping the header data.
 
 ```{r cache = TRUE, message = FALSE}
-storm_data <- read_csv("repdata_data_StormData.csv.bz2")
+raw_data <- read_csv("repdata_data_StormData.csv.bz2")
 ```
 ```{r}
+storm_data = raw_data
 dim(storm_data)
 ```
 ```{r}
@@ -48,7 +46,7 @@ storm_data <- subset(storm_data, select = -c(bgn_time, time_zone, bgn_range, bgn
                                              end_date, end_time, county_end, countyendn, 
                                              end_range, end_azi, end_locati, f, mag, length, width,
                                              stateoffic, zonenames, latitude_e, longitude_,
-                                             remarks, refnum, latitude, longitude, wfo))
+                                             remarks, wfo))
 ```
 
 The values for property and crop damage consist of a value column and a column denoting if the value is in thousands/millions etc. We'll condense these columns to dollar amounts.
@@ -56,7 +54,7 @@ The values for property and crop damage consist of a value column and a column d
 ```{r}
 table(storm_data['propdmgexp'])
 ```
-We can safely assume B/M/K are billion/million/thousand however without documentation on the others the safest cause of action is to drop the rows containing them. 
+I have made the assumption that B/M/K denote billion/million/thousand however without documentation on the others the safest cause of action is to drop the rows containing them. 
 
 ```{r}
 storm_data <- storm_data %>%
@@ -111,7 +109,27 @@ storm_data <- storm_data %>%
 
 ```
 
-Just by picking at the low hanging fruit the number of categories has been reduced to 622. We'll now do a more thorough EDA to assess what more can be done. Due to the event type imbalance in the dataset we'll use the average as our initial summary statistic. Lets look at the highest average loss of life first.
+Just by picking at the low hanging fruit the number of categories has been reduced to 622. 
+
+
+looking at the largest results for the statistics there is an extremely large property damage value for a flood in California ($115 billion). This seems suspicious and warrants further inspection - we'll have to go back to the raw data to check the remarks.
+
+
+```{r}
+refnum = 605943  #event ref
+raw_data[raw_data$REFNUM == refnum,]$REMARKS
+```
+
+Looks like the exponent was entered incorrectly. On further inspection another entry is found for this event on the 31st December that is a more reasonable $115 million. We can drop this record. 
+
+```{r}
+storm_data = storm_data[!storm_data$refnum == refnum,]
+```
+
+
+Due to the event type imbalance in the dataset we'll use the average as our initial summary statistic. Lets look at the highest average loss of life first.
+
+
 
 ```{r}
 
@@ -147,17 +165,19 @@ In the last step we realized that there's a large event frequency imbalance in t
 event_frequency <- events_5[order(-events_5$count),]
 event_frequency
 ```
-This seems a bit odd. We know events that didn't cause any damage are included so why are events like tornadoes and flash floods occurring more often than high wind and flood in the data. Lets plot 10 highest frequency over time to get more insight.
+This seems a bit odd. We know events that didn't cause any damage are included so why are events like tornadoes and flash floods occurring more often than high wind and flood in the data. Lets plot these ten events as their frequency over time to gain insight.
 
-```{r}
+```{r fig.height = 7, fig.width = 15}
 frequency_data <- storm_data %>%
   filter(evtype %in% head(event_frequency$evtype, 10))
 
 
 ggplot(data = frequency_data, aes(bgn_date, color = evtype)) +
-  geom_histogram()
+  geom_histogram(aes(fill = evtype)) 
+
 ```
-So the only highest frequency weather events that were being recorded in this database prior to 1993 were tornadoes, thunderstorm winds and hail. It seems very unlikely that these were the only events causing damage so it looks like we have a lot of missing data prior to 1993. Lets also check the less frequent events over this period.
+
+So the only "high frequency" weather events that were being recorded in this database prior to 1993 were tornadoes, thunderstorm winds and hail. It seems very unlikely that these were the only events causing damage so it looks like we have a lot of missing data prior to 1993. Lets also check the less frequent events over this period.
 
 ```{r}
 distinct_events <- events %>%
@@ -172,10 +192,11 @@ looking at all the years it is the case that up until 1993 only 3 types of event
 ```{r}
 events <- events %>%
   filter(bgn_date >= mdy("01/01/93"))
-events
 ```
 
-As mentioned earlier we have also seen that sometimes events that didn;t cause damage are recorded and sometimes they aren't. This makes using the average values problematic and so we will use only the totals under the assumption that all events that did cause damage were recorded.
+As mentioned earlier we have also seen that sometimes events that didn't cause damage are recorded and sometimes they aren't. This makes using the average values problematic and so I will use only the totals under the assumption that all events that did cause damage were recorded.
+
+
 
 
 ## Exploratory Data Analysis
@@ -184,7 +205,7 @@ Note: I've been limited to 3 figures in this assignment therefore I won't be inc
 
 ### Damage to human life
 
-First we will look at events that cause the greatest loss of life and injury.
+First I will look at events that cause the greatest loss of life and injury.
 
 ```{r}
 pop_dmg <- events %>%
@@ -195,14 +216,14 @@ pop_dmg[order(-pop_dmg$fatalities),]
 ```{r}
 pop_dmg[order(-pop_dmg$injuries),]
 ```
-The proportion of fatalities in the 10 most deadly types of events
+The proportion of fatalities in the 10 most deadly types of events:
 
 ```{r}
-deadliest_events <- head(pop_dmg[order(-pop_dmg$fatalities),], 10)
+deadliest_events <- head(pop_dmg[order(-pop_dmg$fatalities),], 5)
 sum(deadliest_events$fatalities) / sum(pop_dmg$fatalities)
 ```
 
-Due to the complicated nature of measuring death against injury and the lack of information about the kinds of injuries sustained I'll be using fatalities alone when assessing how harmful to population health an event is. More specifically I will assess the 10 events with the highest fatality rate as they are responsible for 77% of the total fatalities attributed to weather events. The rationale behind this is that these are the types relevant to this specific analysis and only using them will improve clarity.
+Due to the complicated nature of measuring death against injury and the lack of information about the kinds of injuries sustained I'll be using fatalities alone when assessing how harmful to population health an event is. More specifically I will assess the five events with the highest fatality rate (responsible for 58.8% of the total fatalities attributed to weather events). The rationale behind this is that these are the types relevant to this specific analysis and only using them will improve clarity.
 
 Lets make a data frame containing all observations from these types:
 ```{r}
@@ -212,24 +233,24 @@ pop_dmg_data <- events %>%
 
 ### Economic Damage
 
-Whilst one could rightly argue that the loss of human life in itself is a form of economic damage we will only be regarding damage to property and crops in this part of the analysis.
+Whilst one could rightly argue that the loss of human life in itself is a form of economic damage I will only be regarding damage to property and crops in this part of the analysis.
 
-As both property and crop damage are measured in dollar amounts we will simply combine them to address the economic damage of different types of events.
+As both property and crop damage are measured in dollar amounts I will simply combine them to address total economic damage. We'll also keep the separated data as knowing the prevalent type of damage will provide insights for making recommendations.
 
 ```{r}
 economic_dmg <- events %>%
   group_by(evtype) %>%
-  summarise(count = n(), damage = sum(propdmg + cropdmg))
+  summarise(count = n(), damage = sum(propdmg + cropdmg), propdmg = sum(propdmg), cropdmg = sum(cropdmg))
 economic_dmg[order(-economic_dmg$damage),]
 ```
 
-We can see floods have had the greatest total economic consequences from 1993 - 2011 and different types of flooding occur several times in the 10 most damaging events. As with fatalities lets see what proportion of economic damage the top ten events account for:
+We can see Hurricanes have had the greatest total economic consequences from 1993 - 2011 and that different types of flooding occur several times in the 10 most damaging events. As with fatalities lets see what proportion of economic damage the top ten events account for:
 
 ```{r}
-costliest_events <- head(economic_dmg[order(-economic_dmg$damage),], 10)
+costliest_events <- head(economic_dmg[order(-economic_dmg$damage),], 5)
 sum(costliest_events$damage) / sum(economic_dmg$damage)
 ```
-The top ten events occur for 90% of the economic damage from all weather events - as with fatalities we'll only look at these events in relation to economic damage.
+The top five events occur for 67.4% of the economic damage from all weather events - as with fatalities we'll only look at these events in relation to economic damage.
 
 ```{r}
 economic_dmg_data <- events %>%
@@ -237,22 +258,163 @@ economic_dmg_data <- events %>%
 ```
 
 
+
 ## Analysis
 
-To provide a simple understandable analysis I've decided to rely on the total fatalities and economic damage to assess which events have the greatest consequences to human life and the economy across the United States. The rationale for this decision is that the requirements of this analysis are to the damage of the event type as a whole and not individual occurunces of it.
 
-The data spans approximately 60 years, a time period which has experienced the introduction new technologies (early warning systems, rescue equipment, etc), population movement and policy changes. Therefore it's important to analyze the temporal variations in order to account for the current situation.
+As the aim of this analysis is to make recommendations on reducing the damage from weather events we must ensure that we're using data that's current but also takes into account trends. A failure to account for trends could result in long term strategies targeting the wrong areas for improvement and delivering sub optimal results. The bulk of this analysis will address these trends and the current situation, however we will also include a geospatial analysis at state level.
+
+```{r fig.height=14, fig.width=16}
+missing_data <- data.frame(c(1996, 2006, 2006, 2006), 
+                           c("heat", "hurricane", "hurricane", "hurricane"), 
+                           c("Fatalities", "Economic Damage \n(Billion $ CPI Adjusted)", "Property Damage  \n(Bilion $ CPI Adjusted)", "Crop Damage  \n(Billion $ CPI Adjusted)"),
+                           c(0, 0, 0, 0))
+names(missing_data) <- c("year", "evtype", "variable", "value")
+
+melted_pop <- pop_dmg_data %>%
+  mutate(year = year(bgn_date)) %>%
+  group_by(year, evtype) %>%
+  summarise(Fatalities = sum(fatalities)) %>%
+  melt(id.vars = c("year", "evtype"))
+
+melted_eco <- economic_dmg_data %>%
+  mutate(year = year(bgn_date), damage = propdmg + cropdmg) %>%
+  group_by(year, evtype) %>%
+  summarise("Economic Damage \n(Billion $ CPI Adjusted)" = sum(damage / 1000000000), 
+            "Property Damage  \n(Bilion $ CPI Adjusted)" = sum(propdmg / 1000000000), 
+            "Crop Damage  \n(Billion $ CPI Adjusted)" = sum(cropdmg / 1000000000)) %>%
+  melt(id.vars = c("year", "evtype"))
+
+rbind(melted_eco, melted_pop, missing_data) %>%
+  ggplot(aes(year, value)) +
+  geom_line(size = 1, aes(color = evtype)) +
+  geom_point(size = 2, aes(color = evtype)) +
+  scale_color_brewer(palette = "Paired") +
+  facet_grid(rows = vars(variable), scales = "free") +
+  labs(title = "Total Fatalities and Economic Damage From Most Damaging Weather Events in the US 1993 - 2011",
+       y = "") +
+  theme(text = element_text(size = 15))
+```
+This figure shows how 5 most damaging types for each statistic vary over time. The most noticeable feature of these plots is the concentration of damage within certain years. For instance  one third of the total tornado fatalities from 1993 - 2011 occurred during 2011. There are similar patterns in economic damage as we see a large peak in 2005 (the year of Hurricane Katrina) and with heat related deaths. Heat related deaths they have been decreasing over the time period which could be a reasonable expectation given the increase in the prevalence of air conditioners. Another take away from these plots is that although crop damage can reach billions of dollars these occasions are rare and are often dwarfed by property damage, in some cases by as much as 2500%. This is most obviously shown by the fact that the property and total economic damage plots are almost indistinguishable.
+
+
+
 
 ```{r}
-fatality_data <- storm_data %>%
-  filter(evtype %in% fatalities_top_10$evtype)
+state_data <- events %>%
+  filter(bgn_date >= mdy("01/01/2001"))%>%
+  group_by(state) %>%
+  summarise(Fatalities = sum(fatalities), 
+            "Property Damage" = sum(propdmg / 1000000000),
+            "Crop Damage" = sum(cropdmg/ 1000000000), 
+            "Economic Damage" = sum(propdmg + cropdmg)/ 1000000000) %>%
+  mutate(state = case_when(state == "AL" ~ "alabama",
+                           state == "AK" ~ "alaska",
+                           state == "AZ" ~ "arizona",
+                           state == "AR" ~ "arkansas",
+                           state == "CA" ~ "california",
+                           state == "CO" ~ "colorado",
+                           state == "CT" ~ "connecticut",
+                           state == "DE" ~ "delaware",
+                           state == "FL" ~ "florida",
+                           state == "GA" ~ "georgia",
+                           state == "DC" ~ "district of columbia",
+                           state == "HI" ~ "hawaii",
+                           state == "ID" ~ "idaho",
+                           state == "IL" ~ "illinois",
+                           state == "IN" ~ "indiana",
+                           state == "IA" ~ "iowa",
+                           state == "KS" ~ "kansas",
+                           state == "KY" ~ "kentucky",
+                           state == "LA" ~ "louisiana",
+                           state == "MD" ~ "maryland",
+                           state == "MI" ~ "michigan",
+                           state == "ME" ~ "maine",
+                           state == "OH" ~ "ohio",
+                           state == "MA" ~ "massachusetts",
+                           state == "MN" ~ "minnesota",
+                           state == "MS" ~ "mississippi",
+                           state == "MO" ~ "missouri",
+                           state == "MT" ~ "montana",
+                           state == "NE" ~ "nebraska",
+                           state == "NV" ~ "nevada",
+                           state == "NH" ~ "new hampshire",
+                           state == "NJ" ~ "new jersey",
+                           state == "NM" ~ "new mexico",
+                           state == "NY" ~ "new york",
+                           state == "NC" ~ "north carolina",
+                           state == "ND" ~ "north dakota",
+                           state == "PA" ~ "pennsylvania",
+                           state == "OK" ~ "oklahoma",
+                           state == "OR" ~ "oregon",
+                           state == "SC" ~ "south carolina",
+                           state == "RI" ~ "rhode island",
+                           state == "SD" ~ "south dakota",
+                           state == "TN" ~ "tennessee",
+                           state == "TX" ~ "texas",
+                           state == "VT" ~ "vermont",
+                           state == "VA" ~ "virginia",
+                           state == "UT" ~ "utah",
+                           state == "WA" ~ "washington",
+                           state == "WV" ~ "west virginia",
+                           state == "WI" ~ "wisconsin",
+                           state == "WY" ~ "wyoming")) 
+  
 
-economic_data <- storm_data %>%
-  filter(evtype %in% economic_dmg_top_10$evtype)
-
-
-ggplot(data = group_by(fatality_data, evtype), aes(bgn_date, log(fatalities), color = evtype)) +
-  stat_summary(fun = "sum", geom = "line")
+us_map <- map_data("state")
+us_map <- left_join(us_map, state_data, by = c("region" = "state")) %>%
+  melt(id.vars = c("long", "lat", "group", "order", "region", "subregion"))
 ```
+
+```{r fig.height=10, fig.width=20}
+plot1 <- ggplot(filter(us_map, variable == "Fatalities"), aes(x = long, y = lat, group = group)) +
+  geom_polygon(aes(fill = value), color = "black") +
+  facet_wrap(~variable) +
+  labs(fill = "Fatalities      ") +
+  theme(text = element_text(size = 15),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+
+plot2 <- plot1 %+% filter(us_map, variable == "Property Damage") +
+  labs(fill = "US Dollars \nBillions \nCPI Adjusted")
+plot3 <- plot2 %+% filter(us_map, variable == "Crop Damage")
+plot4 <- plot2 %+% filter(us_map, variable == "Economic Damage")
+
+grid.arrange(plot1, plot2, plot3, plot4, top = textGrob("Total Fatalities and Economic Damage From Most Damaging Weather Events in the US 2001 - 2011",
+                                                        gp = gpar(fontsize = 20)))
+```
+note: these charts only show the data for the mainland United States
+
+These figures show how the 5 most damaging types for each statistic vary spacially. The conclusions that can be drawn from these maps are somewhat limited due to a failure to include population density data, however we can still extract some valuable insights. The maps display data from 2001 - 2011 making them more current than the previous graphs. We can see that the States bordering the Gulf of Mexico experience above average damage from weather events in terms of loss of human life and economic damage.We saw previously that Hurricanes and their associated events were the main drivers of economic damage and the location of these states at usual hurricane landfall locations likely explains the latter. Fatalities are highest in the South and the Midwest - areas that are associated with high temperatures and tornadoes respectively, events that we saw contribute the most to Fatalities from weather events. California is somewhat of an outlier in the Western United States, without further analysis it's not possible to conclude weather this is as a result of an increased severity or differing of weather events or a result of the increased population density and economic value of the State.
+
+
+
+## Results
+
+The purpose of this analysis was primarily to answer two questions - With respect to population health which event types are the most harmful and which types have the greatest economic consequences.
+
+
+### Population Health
+Over the time period for which we have complete data excessive heat has caused the most fatalities - the measure this study uses to quantify harm to population health. In addition other heat related events have caused large amounts of fatalities, leading to the conclusion that heat related events are the most harmful to population health in the United States of America. We noticed that heat related deaths have decreased throughout the period and if we were to only look at the most recent data we may conclude that tornadoes have been more harmful to population health.
+
+
+### Economic Damage
+Economic damage in this data has largely been caused by Hurricanes and their associated weather events. We learnt that the majority of economic damage was sustained in 2005, the same year as Hurricane Katrina and that the damage was concentrated around the Gulf of Mexico. The conclusion from the data is that Hurricanes and Sea Surges are the types of weather events with the highest economic damage in the United States.
+
+
+
+## Reccomendations
+The recommendations of this analysis is the formation of a Gulf of Mexico disaster preparation and response agency. The agencies purpose being:
+
+ - to ensure the area is as well prepared for extreme events, most notably Hurricanes and their associated events, as feasibly possible. 
+ - To create and implement response mechanisms to ensure resources are effectively allocated in a timely manner so as not to inhibit recovery and 
+ - use political and material means to increase robustness in the face of these weather events.
+
+Furthermore we recommend the establishments of standards for the recording of weather events in order to increase data integrity. Further analysis of the data should be also taken, especially to quantify damage relative to area features such as population size, economic output and other demographics - allowing for more efficient allocation of resources.
+
 
 NOAA National Centers for Environmental Information (NCEI) U.S. Billion-Dollar Weather and Climate Disasters (2022). https://www.ncdc.noaa.gov/billions/, DOI: 10.25921/stkw-7w73
