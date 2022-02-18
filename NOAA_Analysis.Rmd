@@ -27,7 +27,7 @@ Extreme weather events are a regular occurrence in the United States. In 2021 al
 
 We first read in the data which is comma delimited keeping the header data.
 
-```{r cache = TRUE, message = FALSE}
+```{r, message = FALSE}
 raw_data <- read_csv("repdata_data_StormData.csv.bz2")
 ```
 ```{r}
@@ -295,7 +295,7 @@ rbind(melted_eco, melted_pop, missing_data) %>%
        y = "") +
   theme(text = element_text(size = 15))
 ```
-This figure shows how 5 most damaging types for each statistic vary over time. The most noticeable feature of these plots is the concentration of damage within certain years. For instance  one third of the total tornado fatalities from 1993 - 2011 occurred during 2011. There are similar patterns in economic damage as we see a large peak in 2005 (the year of Hurricane Katrina) and with heat related deaths. Heat related deaths they have been decreasing over the time period which could be a reasonable expectation given the increase in the prevalence of air conditioners. Another take away from these plots is that although crop damage can reach billions of dollars these occasions are rare and are often dwarfed by property damage, in some cases by as much as 2500%. This is most obviously shown by the fact that the property and total economic damage plots are almost indistinguishable.
+This figure shows how 5 most damaging types for each statistic vary over time. The most noticeable feature of these plots is the concentration of damage within certain years. For instance  one third of the total tornado fatalities from 1993 - 2011 occurred during 2011. There are similar patterns in economic damage as we see a large peak in 2005 (the year of Hurricane Katrina) and with heat related deaths. Heat related deaths have been decreasing over the time period which could be a reasonable expectation given the increase in the prevalence of air conditioners. We also see that although crop damage can reach billions of dollars these occasions are rare and are often dwarfed by property damage, in some cases by as much as 2500%. This is most obviously shown by the fact that the property and total economic damage plots are almost indistinguishable.
 
 
 
@@ -399,7 +399,7 @@ The purpose of this analysis was primarily to answer two questions - With respec
 
 
 ### Population Health
-Over the time period for which we have complete data excessive heat has caused the most fatalities - the measure this study uses to quantify harm to population health. In addition other heat related events have caused large amounts of fatalities, leading to the conclusion that heat related events are the most harmful to population health in the United States of America. We noticed that heat related deaths have decreased throughout the period and if we were to only look at the most recent data we may conclude that tornadoes have been more harmful to population health.
+Over the time period for which we have complete data excessive heat has caused the most fatalities - the measure this study uses to quantify harm to population health. In addition other heat related events have caused large amounts of fatalities, leading to the conclusion that heat related events are the most harmful to population health in the United States of America. We noticed that heat related deaths have decreased throughout the period and if we were to only look at the most recent data we may instead conclude that tornadoes have been more harmful to population health.
 
 
 ### Economic Damage
@@ -411,8 +411,8 @@ Economic damage in this data has largely been caused by Hurricanes and their ass
 The recommendations of this analysis is the formation of a Gulf of Mexico disaster preparation and response agency. The agencies purpose being:
 
  - to ensure the area is as well prepared for extreme events, most notably Hurricanes and their associated events, as feasibly possible. 
- - To create and implement response mechanisms to ensure resources are effectively allocated in a timely manner so as not to inhibit recovery and 
- - use political and material means to increase robustness in the face of these weather events.
+ - To create and implement response mechanisms to ensure resources are effectively allocated in a timely manner so as not to inhibit recovery
+ - Using political and material means to increase robustness in the face of these weather events.
 
 Furthermore we recommend the establishments of standards for the recording of weather events in order to increase data integrity. Further analysis of the data should be also taken, especially to quantify damage relative to area features such as population size, economic output and other demographics - allowing for more efficient allocation of resources.
 
